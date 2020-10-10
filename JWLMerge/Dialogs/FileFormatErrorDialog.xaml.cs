@@ -3,11 +3,11 @@
     using System.Windows.Controls;
 
     /// <summary>
-    /// Interaction logic for ImportBibleNotesDialog.xaml.
+    /// Interaction logic for FileFormatErrorDialog.xaml
     /// </summary>
-    public partial class ImportBibleNotesDialog : UserControl
+    public partial class FileFormatErrorDialog : UserControl
     {
-        public ImportBibleNotesDialog()
+        public FileFormatErrorDialog()
         {
             InitializeComponent();
         }

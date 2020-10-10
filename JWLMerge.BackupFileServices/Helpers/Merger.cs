@@ -4,7 +4,7 @@
     using System.Collections.Generic;
     using System.Linq;
     using JWLMerge.BackupFileServices.Events;
-    using JWLMerge.BackupFileServices.Models.Database;
+    using JWLMerge.BackupFileServices.Models.DatabaseModels;
     using Serilog;
 
     /// <summary>
@@ -68,6 +68,7 @@
             
             MergeUserMarks(source, destination);
             MergeNotes(source, destination);
+            MergeInputFields(source, destination);
             MergeTags(source, destination);
             MergeTagMap(source, destination);
             MergeBlockRanges(source, destination);
@@ -181,39 +182,59 @@
         {
             ProgressMessage(" Tag maps");
 
-            foreach (var tagMap in source.TagMaps)
+            foreach (var sourceTagMap in source.TagMaps)
             {
-                var tagId = _translatedTagIds.GetTranslatedId(tagMap.TagId);
-                var typeId = 0;
-                
-                switch (tagMap.Type)
+                if (sourceTagMap.PlaylistItemId != null)
                 {
-                    case 0:
-                        // a tag on a location
-                        typeId = _translatedLocationIds.GetTranslatedId(tagMap.TypeId);
-                        if (typeId == 0)
-                        {
-                            // must add location...
-                            var location = source.FindLocation(tagMap.TypeId);
-                            InsertLocation(location, destination);
-                            typeId = _translatedLocationIds.GetTranslatedId(tagMap.TypeId);
-                        }
-                        
-                        break;
-                        
-                    case 1:
-                        // a tag on a Note
-                        typeId = _translatedNoteIds.GetTranslatedId(tagMap.TypeId);
-                        break;
+                    // we ignore playlist during merge
+                    continue;
                 }
 
-                if (typeId != 0)
+                var tagId = _translatedTagIds.GetTranslatedId(sourceTagMap.TagId);
+                var id = 0;
+                TagMap existingTagMap = null;
+                
+                if (sourceTagMap.LocationId != null)
                 {
-                    var existingTagMap = destination.FindTagMap(tagId, typeId);
-                    if (existingTagMap == null)
+                    // a tag on a location.
+                    id = _translatedLocationIds.GetTranslatedId(sourceTagMap.LocationId.Value);
+                    if (id == 0)
                     {
-                        InsertTagMap(tagMap, destination);
+                        // must add location...
+                        var location = source.FindLocation(sourceTagMap.LocationId.Value);
+                        InsertLocation(location, destination);
+                        id = _translatedLocationIds.GetTranslatedId(sourceTagMap.LocationId.Value);
                     }
+
+                    existingTagMap = destination.FindTagMapForLocation(tagId, id);
+                }
+                else if (sourceTagMap.NoteId != null)
+                {
+                    // a tag on a Note
+                    id = _translatedNoteIds.GetTranslatedId(sourceTagMap.NoteId.Value);
+                    existingTagMap = destination.FindTagMapForNote(tagId, id);
+                }
+
+                if (id != 0 && existingTagMap == null)
+                {
+                    InsertTagMap(sourceTagMap, destination);
+                }
+            }
+
+            NormaliseTagMapPositions(destination.TagMaps);
+        }
+
+        private void NormaliseTagMapPositions(List<TagMap> entries)
+        {
+            // there is unique constraint on TagId, Position
+            var tmpStorage = entries.GroupBy(x => x.TagId).ToDictionary(x => x.Key);
+            
+            foreach (var item in tmpStorage)
+            {
+                var pos = 0;
+                foreach (var entry in item.Value.OrderBy(x => x.Position))
+                {
+                    entry.Position = pos++;
                 }
             }
         }
@@ -224,7 +245,7 @@
 
             foreach (var tag in source.Tags)
             {
-                var existingTag = destination.FindTag(tag.Name);
+                var existingTag = destination.FindTag(tag.Type, tag.Name);
                 if (existingTag != null)
                 {
                     _translatedTagIds.Add(tag.TagId, existingTag.TagId);
@@ -240,21 +261,21 @@
         {
             ProgressMessage(" User marks");
 
-            foreach (var userMark in source.UserMarks)
+            foreach (var sourceUserMark in source.UserMarks)
             {
-                var existingUserMark = destination.FindUserMark(userMark.UserMarkGuid);
+                var existingUserMark = destination.FindUserMark(sourceUserMark.UserMarkGuid);
                 if (existingUserMark != null)
                 {
                     // user mark already exists in destination...
-                    _translatedUserMarkIds.Add(userMark.UserMarkId, existingUserMark.UserMarkId);
+                    _translatedUserMarkIds.Add(sourceUserMark.UserMarkId, existingUserMark.UserMarkId);
                 }
                 else
                 {
-                    var referencedLocation = userMark.LocationId;
+                    var referencedLocation = sourceUserMark.LocationId;
                     var location = source.FindLocation(referencedLocation);
 
                     InsertLocation(location, destination);
-                    InsertUserMark(userMark, destination);
+                    InsertUserMark(sourceUserMark, destination);
                 }
             }
         }
@@ -279,6 +300,13 @@
             }
         }
 
+        private void InsertInputField(InputField inputField, int locationId, Database destination)
+        {
+            var inputFldClone = inputField.Clone();
+            inputFldClone.LocationId = locationId;
+            destination.InputFields.Add(inputFldClone);
+        }
+
         private void InsertUserMark(UserMark userMark, Database destination)
         {
             UserMark newUserMark = userMark.Clone();
@@ -300,24 +328,30 @@
 
         private void InsertTagMap(TagMap tagMap, Database destination)
         {
+            if (tagMap.PlaylistItemId != null)
+            {
+                // we ignore playlists during merge.
+                return;
+            }
+
             TagMap newTagMap = tagMap.Clone();
             newTagMap.TagMapId = ++_maxTagMapId;
             newTagMap.TagId = _translatedTagIds.GetTranslatedId(tagMap.TagId);
 
-            newTagMap.TypeId = 0;
-            
-            switch (newTagMap.Type)
-            {
-                case 0:
-                    newTagMap.TypeId = _translatedLocationIds.GetTranslatedId(tagMap.TypeId);
-                    break;
+            newTagMap.LocationId = null;
+            newTagMap.PlaylistItemId = null;
+            newTagMap.NoteId = null;
 
-                case 1:
-                    newTagMap.TypeId = _translatedNoteIds.GetTranslatedId(tagMap.TypeId);
-                    break;
+            if (tagMap.LocationId != null)
+            {
+                newTagMap.LocationId = _translatedLocationIds.GetTranslatedId(tagMap.LocationId.Value);
             }
-            
-            if (newTagMap.TypeId != 0)
+            else if (tagMap.NoteId != null)
+            {
+                newTagMap.NoteId = _translatedNoteIds.GetTranslatedId(tagMap.NoteId.Value);
+            }
+
+            if (newTagMap.LocationId != null || newTagMap.NoteId != null)
             {
                 destination.TagMaps.Add(newTagMap);
             }
@@ -349,6 +383,34 @@
 
             newRange.UserMarkId = _translatedUserMarkIds.GetTranslatedId(range.UserMarkId);
             destination.BlockRanges.Add(newRange);
+        }
+
+        private void MergeInputFields(Database source, Database destination)
+        {
+            ProgressMessage(" Input Fields");
+
+            foreach (var inputField in source.InputFields)
+            {
+                var locationId = _translatedLocationIds.GetTranslatedId(inputField.LocationId);
+
+                if (locationId == 0)
+                {
+                    // location unknown so add it...
+                    var referencedLocation = inputField.LocationId;
+                    var location = source.FindLocation(referencedLocation);
+
+                    InsertLocation(location, destination);
+
+                    locationId = location.LocationId;
+                }
+
+                var existingInputField = destination.FindInputField(inputField.LocationId, inputField.TextTag);
+                if (existingInputField == null)
+                {
+                    // not found so add
+                    InsertInputField(inputField, locationId, destination);
+                }
+            }
         }
 
         private void MergeNotes(Database source, Database destination)

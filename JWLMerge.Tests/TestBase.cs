@@ -2,9 +2,9 @@
 {
     using System;
     using System.Collections.Generic;
-    using BackupFileServices.Models;
-    using BackupFileServices.Models.Database;
-    using BackupFileServices.Models.ManifestFile;
+    using JWLMerge.BackupFileServices.Models;
+    using JWLMerge.BackupFileServices.Models.DatabaseModels;
+    using JWLMerge.BackupFileServices.Models.ManifestFile;
 
     public class TestBase
     {
@@ -15,7 +15,7 @@
             return new BackupFile
             {
                 Manifest = CreateMockManifest(),
-                Database = CreateMockDatabase(numRecords)
+                Database = CreateMockDatabase(numRecords),
             };
         }
 
@@ -23,17 +23,13 @@
         {
             var result = new Database();
 
-            result.Bookmarks = new List<Bookmark>();
-            result.LastModified = new LastModified();
-            result.LastModified.TimeLastModified = "2018-01-20T11:35:00Z";
-                
-            result.UserMarks = CreateMockUserMarks(numRecords);
-            result.Locations = CreateMockLocations(numRecords);
-            result.Notes = CreateMockNotes(numRecords);
-            result.BlockRanges = CreateMockBlockRanges(numRecords);
+            result.InitBlank();
 
-            result.TagMaps = new List<TagMap>();
-            result.Tags = new List<Tag>();
+            result.LastModified.TimeLastModified = "2018-01-20T11:35:00Z";
+            result.UserMarks.AddRange(CreateMockUserMarks(numRecords));
+            result.Locations.AddRange(CreateMockLocations(numRecords));
+            result.Notes.AddRange(CreateMockNotes(numRecords));
+            result.BlockRanges.AddRange(CreateMockBlockRanges(numRecords));
 
             return result;
         }
@@ -54,8 +50,8 @@
                     Hash = "123",
                     DeviceName = "Test",
                     LastModifiedDate = simpleDateString,
-                    SchemaVersion = 5
-                }
+                    SchemaVersion = 5,
+                },
             };
         }
 
@@ -71,7 +67,7 @@
                     UserMarkId = n,
                     BlockType = 2,
                     EndToken = 4,
-                    Identifier = 8
+                    Identifier = 8,
                 });
             }
             
@@ -87,14 +83,16 @@
                 result.Add(new Note
                 {
                     NoteId = n,
+#pragma warning disable CA1304 // Specify CultureInfo
                     Guid = Guid.NewGuid().ToString().ToLower(),
+#pragma warning restore CA1304 // Specify CultureInfo
                     UserMarkId = n,
                     LocationId = n,
                     Title = $"Title {n}",
                     Content = $"Content {n}",
                     LastModified = "2018-01-20T11:35:00Z",
                     BlockType = 2,
-                    BlockIdentifier = _random.Next(1, 10)
+                    BlockIdentifier = _random.Next(1, 10),
                 });
             }
 
@@ -112,8 +110,10 @@
                     UserMarkId = n,
                     ColorIndex = 1,
                     LocationId = n,
+#pragma warning disable CA1304 // Specify CultureInfo
                     UserMarkGuid = Guid.NewGuid().ToString().ToLower(),
-                    Version = 1
+#pragma warning restore CA1304 // Specify CultureInfo
+                    Version = 1,
                 });
             }
 
@@ -132,7 +132,7 @@
                     Title = $"Title {n}",
                     BookNumber = _random.Next(1, 67),
                     ChapterNumber = _random.Next(1, 30),
-                    KeySymbol = "nwtsty"
+                    KeySymbol = "nwtsty",
                 });
             }
 

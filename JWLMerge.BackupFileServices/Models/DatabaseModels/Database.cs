@@ -1,10 +1,10 @@
-﻿namespace JWLMerge.BackupFileServices.Models.Database
+﻿namespace JWLMerge.BackupFileServices.Models.DatabaseModels
 {
-    using Serilog;
     using System;
     using System.Collections.Generic;
     using System.Linq;
     using JWLMerge.BackupFileServices.Exceptions;
+    using Serilog;
 
     public class Database
     {
@@ -12,6 +12,7 @@
         
         private Lazy<Dictionary<string, Note>> _notesGuidIndex;
         private Lazy<Dictionary<int, Note>> _notesIdIndex;
+        private Lazy<Dictionary<int, List<InputField>>> _inputFieldsIndex;
         private Lazy<Dictionary<BibleBookChapterAndVerse, List<Note>>> _notesVerseIndex;
         private Lazy<Dictionary<string, UserMark>> _userMarksGuidIndex;
         private Lazy<Dictionary<int, UserMark>> _userMarksIdIndex;
@@ -19,9 +20,10 @@
         private Lazy<Dictionary<int, Location>> _locationsIdIndex;
         private Lazy<Dictionary<string, Location>> _locationsValueIndex;
         private Lazy<Dictionary<string, Location>> _locationsBibleChapterIndex;
-        private Lazy<Dictionary<string, Tag>> _tagsNameIndex;
+        private Lazy<Dictionary<TagTypeAndName, Tag>> _tagsNameIndex;
         private Lazy<Dictionary<int, Tag>> _tagsIdIndex;
-        private Lazy<Dictionary<string, TagMap>> _tagMapIndex;
+        private Lazy<Dictionary<string, TagMap>> _tagMapNoteIndex;
+        private Lazy<Dictionary<string, TagMap>> _tagMapLocationIndex;
         private Lazy<Dictionary<int, List<BlockRange>>> _blockRangesUserMarkIdIndex;
         private Lazy<Dictionary<string, Bookmark>> _bookmarksIndex;
 
@@ -30,16 +32,40 @@
             ReinitializeIndexes();
         }
 
+        public LastModified LastModified { get; } = new LastModified();
+
+        public List<Location> Locations { get; } = new List<Location>();
+
+        public List<Note> Notes { get; } = new List<Note>();
+
+        public List<InputField> InputFields { get; } = new List<InputField>();
+
+        public List<Tag> Tags { get; } = new List<Tag>();
+
+        public List<TagMap> TagMaps { get; } = new List<TagMap>();
+
+        public List<BlockRange> BlockRanges { get; } = new List<BlockRange>();
+
+        public List<Bookmark> Bookmarks { get; } = new List<Bookmark>();
+
+        public List<UserMark> UserMarks { get; } = new List<UserMark>();
+
+        public static string GetDateTimeUtcAsDbString(DateTime dateTime)
+        {
+            return $"{dateTime:s}Z";
+        }
+
         public void InitBlank()
         {
-            LastModified = new LastModified();
-            Locations = new List<Location>();
-            Notes = new List<Note>();
-            Tags = new List<Tag>();
-            TagMaps = new List<TagMap>();
-            BlockRanges = new List<BlockRange>();
-            Bookmarks = new List<Bookmark>();
-            UserMarks = new List<UserMark>();
+            LastModified.Reset();
+            Locations.Clear();
+            Notes.Clear();
+            InputFields.Clear();
+            Tags.Clear();
+            TagMaps.Clear();
+            BlockRanges.Clear();
+            Bookmarks.Clear();
+            UserMarks.Clear();
         }
 
         public void CheckValidity()
@@ -69,32 +95,16 @@
             }
         }
 
-        public LastModified LastModified { get; set; }
-        
-        public List<Location> Locations { get; set; }
-        
-        public List<Note> Notes { get; set; }
-        
-        public List<Tag> Tags { get; set; }
-
-        public List<TagMap> TagMaps { get; set; }
-        
-        public List<BlockRange> BlockRanges { get; set; }
-
-        public List<Bookmark> Bookmarks { get; set; }
-
-        public List<UserMark> UserMarks { get; set; }
-
-        public static string GetDateTimeUtcAsDbString(DateTime dateTime)
-        {
-            return $"{dateTime:s}Z";
-        }
-
         public void AddBibleNoteAndUpdateIndex(
             BibleBookChapterAndVerse verseRef, 
             Note value,
             TagMap tagMap)
         {
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
             Notes.Add(value);
 
             if (tagMap != null)
@@ -126,6 +136,11 @@
 
         public void AddBlockRangeAndUpdateIndex(BlockRange value)
         {
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
             BlockRanges.Add(value);
 
             if (_blockRangesUserMarkIdIndex.IsValueCreated)
@@ -134,7 +149,6 @@
                 {
                     blockRangeList = new List<BlockRange>();
                     _blockRangesUserMarkIdIndex.Value.Add(value.UserMarkId, blockRangeList);
-
                 }
 
                 blockRangeList.Add(value);
@@ -143,6 +157,11 @@
 
         public void AddUserMarkAndUpdateIndex(UserMark value)
         {
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
             UserMarks.Add(value);
 
             if (_userMarksGuidIndex.IsValueCreated)
@@ -169,6 +188,11 @@
 
         public void AddLocationAndUpdateIndex(Location value)
         {
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
             Locations.Add(value);
 
             if (_locationsIdIndex.IsValueCreated)
@@ -185,26 +209,25 @@
                 }
             }
 
-            if (_locationsBibleChapterIndex.IsValueCreated)
+            if (_locationsBibleChapterIndex.IsValueCreated && 
+                value.BookNumber != null && 
+                value.ChapterNumber != null)
             {
-                if (value.BookNumber != null && value.ChapterNumber != null)
-                {
-                    var key = GetLocationByBibleChapterKey(
-                        value.BookNumber.Value,
-                        value.ChapterNumber.Value,
-                        value.KeySymbol);
+                var key = GetLocationByBibleChapterKey(
+                    value.BookNumber.Value,
+                    value.ChapterNumber.Value,
+                    value.KeySymbol);
 
-                    if (!_locationsBibleChapterIndex.Value.ContainsKey(key))
-                    {
-                        _locationsBibleChapterIndex.Value.Add(key, value);
-                    }
+                if (!_locationsBibleChapterIndex.Value.ContainsKey(key))
+                {
+                    _locationsBibleChapterIndex.Value.Add(key, value);
                 }
             }
         }
 
-        public Note FindNote(string guid)
+        public Note FindNote(string noteGuid)
         {
-            return _notesGuidIndex.Value.TryGetValue(guid, out var note) ? note : null;
+            return _notesGuidIndex.Value.TryGetValue(noteGuid, out var note) ? note : null;
         }
 
         public Note FindNote(int noteId)
@@ -217,9 +240,9 @@
             return _notesVerseIndex.Value.TryGetValue(verseRef, out var notes) ? notes : null;
         }
 
-        public UserMark FindUserMark(string guid)
+        public UserMark FindUserMark(string userMarkGuid)
         {
-            return _userMarksGuidIndex.Value.TryGetValue(guid, out var userMark) ? userMark : null;
+            return _userMarksGuidIndex.Value.TryGetValue(userMarkGuid, out var userMark) ? userMark : null;
         }
 
         public UserMark FindUserMark(int userMarkId)
@@ -232,9 +255,10 @@
             return _userMarksLocationIdIndex.Value.TryGetValue(locationId, out var userMarks) ? userMarks : null;
         }
 
-        public Tag FindTag(string tagName)
+        public Tag FindTag(int tagType, string tagName)
         {
-            return _tagsNameIndex.Value.TryGetValue(tagName, out var tag) ? tag : null;
+            var key = new TagTypeAndName(tagType, tagName);
+            return _tagsNameIndex.Value.TryGetValue(key, out var tag) ? tag : null;
         }
 
         public Tag FindTag(int tagId)
@@ -242,9 +266,14 @@
             return _tagsIdIndex.Value.TryGetValue(tagId, out var tag) ? tag : null;
         }
 
-        public TagMap FindTagMap(int tagId, int noteId)
+        public TagMap FindTagMapForNote(int tagId, int noteId)
         {
-            return _tagMapIndex.Value.TryGetValue(GetTagMapKey(tagId, noteId), out var tag) ? tag : null;
+            return _tagMapNoteIndex.Value.TryGetValue(GetTagMapNoteKey(tagId, noteId), out var tag) ? tag : null;
+        }
+
+        public TagMap FindTagMapForLocation(int tagId, int locationId)
+        {
+            return _tagMapLocationIndex.Value.TryGetValue(GetTagMapLocationKey(tagId, locationId), out var tag) ? tag : null;
         }
 
         public Location FindLocation(int locationId)
@@ -252,8 +281,23 @@
             return _locationsIdIndex.Value.TryGetValue(locationId, out var location) ? location : null;
         }
 
+        public InputField FindInputField(int locationId, string textTag)
+        {
+            if (!_inputFieldsIndex.Value.TryGetValue(locationId, out var list))
+            {
+                return null;
+            }
+
+            return list.SingleOrDefault(x => x.TextTag.Equals(textTag, StringComparison.OrdinalIgnoreCase));
+        }
+
         public Location FindLocationByValues(Location locationValues)
         {
+            if (locationValues == null)
+            {
+                throw new ArgumentNullException(nameof(locationValues));
+            }
+
             var key = GetLocationByValueKey(locationValues);
             return _locationsValueIndex.Value.TryGetValue(key, out var location) ? location : null;
         }
@@ -292,6 +336,24 @@
             return Notes.ToDictionary(note => note.Guid);
         }
 
+        private Dictionary<int, List<InputField>> InputFieldsIndexValueFactory()
+        {
+            var result = new Dictionary<int, List<InputField>>();
+
+            foreach (var fld in InputFields)
+            {
+                if (!result.TryGetValue(fld.LocationId, out var list))
+                {
+                    list = new List<InputField>();
+                    result.Add(fld.LocationId, list);
+                }
+
+                list.Add(fld);
+            }
+
+            return result;
+        }
+
         private Dictionary<int, Note> NoteIdIndexValueFactory()
         {
             return Notes.ToDictionary(note => note.NoteId);
@@ -311,12 +373,10 @@
                     var location = FindLocation(note.LocationId.Value);
                     if (location?.BookNumber != null && location.ChapterNumber != null)
                     {
-                        var verseRef = new BibleBookChapterAndVerse
-                        {
-                            BookNumber = location.BookNumber.Value,
-                            ChapterNumber = location.ChapterNumber.Value,
-                            VerseNumber = note.BlockIdentifier.Value
-                        };
+                        var verseRef = new BibleBookChapterAndVerse(
+                            location.BookNumber.Value,
+                            location.ChapterNumber.Value, 
+                            note.BlockIdentifier.Value);
 
                         if (!result.TryGetValue(verseRef, out var notesOnVerse))
                         {
@@ -453,9 +513,9 @@
             return result;
         }
 
-        private Dictionary<string, Tag> TagIndexValueFactory()
+        private Dictionary<TagTypeAndName, Tag> TagIndexValueFactory()
         {
-            return Tags.ToDictionary(tag => tag.Name);
+            return Tags.ToDictionary(tag => new TagTypeAndName(tag.Type, tag.Name));
         }
 
         private Dictionary<int, Tag> TagIdIndexValueFactory()
@@ -463,19 +523,43 @@
             return Tags.ToDictionary(tag => tag.TagId);
         }
 
-        private string GetTagMapKey(int tagId, int noteId)
+        private string GetTagMapNoteKey(int tagId, int noteId)
         {
             return $"{tagId}-{noteId}";
         }
 
-        private Dictionary<string, TagMap> TagMapIndexValueFactory()
+        private string GetTagMapLocationKey(int tagId, int locationId)
+        {
+            return $"{tagId}-{locationId}";
+        }
+
+        private Dictionary<string, TagMap> TagMapNoteIndexValueFactory()
         {
             var result = new Dictionary<string, TagMap>();
 
             foreach (var tagMap in TagMaps)
             {
-                string key = GetTagMapKey(tagMap.TagId, tagMap.TypeId);
-                result.Add(key, tagMap);
+                if (tagMap.NoteId != null)
+                {
+                    string key = GetTagMapNoteKey(tagMap.TagId, tagMap.NoteId.Value);
+                    result.Add(key, tagMap);
+                }
+            }
+
+            return result;
+        }
+
+        private Dictionary<string, TagMap> TagMapLocationIndexValueFactory()
+        {
+            var result = new Dictionary<string, TagMap>();
+
+            foreach (var tagMap in TagMaps)
+            {
+                if (tagMap.LocationId != null)
+                {
+                    string key = GetTagMapLocationKey(tagMap.TagId, tagMap.LocationId.Value);
+                    result.Add(key, tagMap);
+                }
             }
 
             return result;
@@ -496,14 +580,14 @@
         {
             foreach (var tagMap in TagMaps)
             {
-                if (tagMap.Type == 1)
+                if (tagMap.NoteId != null)
                 {
                     if (FindTag(tagMap.TagId) == null)
                     {
                         throw new BackupFileServicesException($"Could not find tag for tag map {tagMap.TagMapId}");
                     }
 
-                    if (FindNote(tagMap.TypeId) == null)
+                    if (FindNote(tagMap.NoteId.Value) == null)
                     {
                         throw new BackupFileServicesException($"Could not find note for tag map {tagMap.TagMapId}");
                     }
@@ -554,6 +638,7 @@
         {
             _notesGuidIndex = new Lazy<Dictionary<string, Note>>(NoteIndexValueFactory);
             _notesIdIndex = new Lazy<Dictionary<int, Note>>(NoteIdIndexValueFactory);
+            _inputFieldsIndex = new Lazy<Dictionary<int, List<InputField>>>(InputFieldsIndexValueFactory);
             _notesVerseIndex = new Lazy<Dictionary<BibleBookChapterAndVerse, List<Note>>>(NoteVerseIndexValueFactory);
             _userMarksGuidIndex = new Lazy<Dictionary<string, UserMark>>(UserMarkIndexValueFactory);
             _userMarksIdIndex = new Lazy<Dictionary<int, UserMark>>(UserMarkIdIndexValueFactory);
@@ -561,9 +646,10 @@
             _locationsIdIndex = new Lazy<Dictionary<int, Location>>(LocationsIndexValueFactory);
             _locationsValueIndex = new Lazy<Dictionary<string, Location>>(LocationsByValueIndexValueFactory);
             _locationsBibleChapterIndex = new Lazy<Dictionary<string, Location>>(LocationsByBibleChapterIndexValueFactory);
-            _tagsNameIndex = new Lazy<Dictionary<string, Tag>>(TagIndexValueFactory);
+            _tagsNameIndex = new Lazy<Dictionary<TagTypeAndName, Tag>>(TagIndexValueFactory);
             _tagsIdIndex = new Lazy<Dictionary<int, Tag>>(TagIdIndexValueFactory);
-            _tagMapIndex = new Lazy<Dictionary<string, TagMap>>(TagMapIndexValueFactory);
+            _tagMapNoteIndex = new Lazy<Dictionary<string, TagMap>>(TagMapNoteIndexValueFactory);
+            _tagMapLocationIndex = new Lazy<Dictionary<string, TagMap>>(TagMapLocationIndexValueFactory);
             _blockRangesUserMarkIdIndex = new Lazy<Dictionary<int, List<BlockRange>>>(BlockRangeIndexValueFactory);
             _bookmarksIndex = new Lazy<Dictionary<string, Bookmark>>(BookmarkIndexValueFactory);
         }
@@ -596,8 +682,8 @@
             {
                 var tagMap = TagMaps[n];
 
-                if (tagMap.Type == 1 && 
-                    (FindTag(tagMap.TagId) == null || FindNote(tagMap.TypeId) == null))
+                if (tagMap.NoteId != null && 
+                    (FindTag(tagMap.TagId) == null || FindNote(tagMap.NoteId.Value) == null))
                 {
                     ++fixupCount;
                     TagMaps.RemoveAt(n);

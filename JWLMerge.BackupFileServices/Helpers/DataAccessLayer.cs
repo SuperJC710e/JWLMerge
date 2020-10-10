@@ -6,7 +6,7 @@
     using System.Linq;
     using System.Reflection;
     using System.Text;
-    using JWLMerge.BackupFileServices.Models.Database;
+    using JWLMerge.BackupFileServices.Models.DatabaseModels;
     using Serilog;
 
     /// <summary>
@@ -66,14 +66,16 @@
 
             using (var connection = CreateConnection())
             {
-                result.LastModified = ReadAllRows(connection, ReadLastModified).FirstOrDefault();
-                result.Locations = ReadAllRows(connection, ReadLocation);
-                result.Notes = ReadAllRows(connection, ReadNote);
-                result.Tags = ReadAllRows(connection, ReadTag);
-                result.TagMaps = ReadAllRows(connection, ReadTagMap);
-                result.BlockRanges = ReadAllRows(connection, ReadBlockRange);
-                result.Bookmarks = ReadAllRows(connection, ReadBookmark);
-                result.UserMarks = ReadAllRows(connection, ReadUserMark);
+                result.InitBlank();
+
+                result.LastModified.TimeLastModified = ReadAllRows(connection, ReadLastModified)?.FirstOrDefault()?.TimeLastModified;
+                result.Locations.AddRange(ReadAllRows(connection, ReadLocation));
+                result.Notes.AddRange(ReadAllRows(connection, ReadNote));
+                result.Tags.AddRange(ReadAllRows(connection, ReadTag));
+                result.TagMaps.AddRange(ReadAllRows(connection, ReadTagMap));
+                result.BlockRanges.AddRange(ReadAllRows(connection, ReadBlockRange));
+                result.Bookmarks.AddRange(ReadAllRows(connection, ReadBookmark));
+                result.UserMarks.AddRange(ReadAllRows(connection, ReadUserMark));
 
                 // ensure bookmarks appear in similar order to original.
                 result.Bookmarks.Sort((bookmark1, bookmark2) => bookmark1.Slot.CompareTo(bookmark2.Slot));
@@ -170,6 +172,7 @@
                 TagId = ReadInt(reader, "TagId"),
                 Type = ReadInt(reader, "Type"),
                 Name = ReadString(reader, "Name"),
+                ImageFileName = ReadNullableString(reader, "ImageFilename"),    // added in db v7 April 2020
             };
         }
 
@@ -178,8 +181,12 @@
             return new TagMap
             {
                 TagMapId = ReadInt(reader, "TagMapId"),
-                Type = ReadInt(reader, "Type"),
-                TypeId = ReadInt(reader, "TypeId"),
+                
+                // added in db v7, April 2020...
+                PlaylistItemId = ReadNullableInt(reader, "PlaylistItemId"),
+                LocationId = ReadNullableInt(reader, "LocationId"),
+                NoteId = ReadNullableInt(reader, "NoteId"),
+
                 TagId = ReadInt(reader, "TagId"),
                 Position = ReadInt(reader, "Position"),
             };

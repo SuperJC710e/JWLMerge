@@ -10,7 +10,7 @@
     using JWLMerge.BackupFileServices;
     using JWLMerge.BackupFileServices.Helpers;
     using JWLMerge.BackupFileServices.Models;
-    using JWLMerge.BackupFileServices.Models.Database;
+    using JWLMerge.BackupFileServices.Models.DatabaseModels;
     using JWLMerge.BackupFileServices.Models.ManifestFile;
     using JWLMerge.Messages;
     using JWLMerge.Models;
@@ -40,9 +40,9 @@
 
             ListItems = CreateListItems();
 
-            ImportBibleNotesCommand = new RelayCommand(ImportBibleNotes);
-            RedactNotesCommand = new RelayCommand(RedactNotes);
-            DeleteFavouritesCommand = new RelayCommand(DeleteFavourites);
+            ImportBibleNotesCommand = new RelayCommand(async () => await ImportBibleNotes().ConfigureAwait(true));
+            RedactNotesCommand = new RelayCommand(async () => await RedactNotes().ConfigureAwait(true));
+            DeleteFavouritesCommand = new RelayCommand(async () => await DeleteFavourites().ConfigureAwait(true));
         }
 
         public string FilePath { get; set; }
@@ -132,7 +132,7 @@
 
                         case JwLibraryFileDataTypes.LastModified:
                             return BackupFile != null
-                                ? new List<LastModified> {BackupFile.Database.LastModified}
+                                ? new List<LastModified> { BackupFile.Database.LastModified }
                                 : null;
 
                         case JwLibraryFileDataTypes.Tag:
@@ -175,12 +175,12 @@
             return result;
         }
 
-        private async void DeleteFavourites()
+        private async Task DeleteFavourites()
         {
             var favourites = BackupFile?.Database.TagMaps.Where(x => x.TagId == 1);
             if (favourites != null && 
                 favourites.Any() && 
-                await _dialogService.ShouldRemoveFavourites())
+                await _dialogService.ShouldRemoveFavouritesAsync().ConfigureAwait(true))
             {
                 DeleteFavouritesInternal();
             }
@@ -201,11 +201,11 @@
             });
         }
 
-        private async void RedactNotes()
+        private async Task RedactNotes()
         {
             var notes = BackupFile?.Database.Notes;
             if (notes != null && 
-                await _dialogService.ShouldRedactNotes())
+                await _dialogService.ShouldRedactNotesAsync().ConfigureAwait(true))
             {
                 RedactNotesInternal(notes);
             }
@@ -243,7 +243,7 @@
             });
         }
 
-        private async void ImportBibleNotes()
+        private async Task ImportBibleNotes()
         {
             var path = _fileOpenSaveService.GetBibleNotesImportFilePath("Bible Notes File");
             if (!string.IsNullOrWhiteSpace(path))
@@ -254,7 +254,7 @@
 
                 userDefinedTags.Insert(0, new Tag { TagId = 0, Type = 0, Name = "** No Tag **" });
 
-                var options = await _dialogService.GetImportBibleNotesParams(userDefinedTags);
+                var options = await _dialogService.GetImportBibleNotesParamsAsync(userDefinedTags).ConfigureAwait(true);
                 if (options == null)
                 {
                     return;
@@ -281,7 +281,7 @@
                 }).ContinueWith(t =>
                 {
                     IsBusy = false;
-                });
+                }).ConfigureAwait(true);
             }
         }
 

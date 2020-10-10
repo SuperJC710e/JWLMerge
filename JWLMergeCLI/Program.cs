@@ -4,7 +4,7 @@
     using System.Diagnostics;
     using Serilog;
 
-    public class Program
+    public static class Program
     {
         /// <summary>
         /// The main entry point.
@@ -23,7 +23,7 @@
             {
                 Log.Logger.Information("Started");
 
-                if (args.Length < 2)
+                if (args == null || args.Length < 2)
                 {
                     ShowUsage();
                 }
@@ -37,7 +37,6 @@
                 Environment.ExitCode = 0;
                 Log.Logger.Information("Finished");
             }
-            // ReSharper disable once CatchAllClause
             catch (Exception ex)
             {
                 Log.Logger.Error(ex, "Error");

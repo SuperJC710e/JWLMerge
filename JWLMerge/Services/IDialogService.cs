@@ -1,17 +1,20 @@
 ﻿namespace JWLMerge.Services
 {
+    using System;
     using System.Collections.Generic;
     using System.Threading.Tasks;
     using JWLMerge.BackupFileServices.Models;
-    using JWLMerge.BackupFileServices.Models.Database;
-    
+    using JWLMerge.BackupFileServices.Models.DatabaseModels;
+
     internal interface IDialogService
     {
-        Task<bool> ShouldRedactNotes();
+        Task ShowFileFormatErrorsAsync(AggregateException ex);
 
-        Task<bool> ShouldRemoveFavourites();
+        Task<bool> ShouldRedactNotesAsync();
 
-        Task<ImportBibleNotesParams> GetImportBibleNotesParams(IReadOnlyCollection<Tag> databaseTags);
+        Task<bool> ShouldRemoveFavouritesAsync();
+
+        Task<ImportBibleNotesParams> GetImportBibleNotesParamsAsync(IReadOnlyCollection<Tag> databaseTags);
 
         bool IsDialogVisible();
     }

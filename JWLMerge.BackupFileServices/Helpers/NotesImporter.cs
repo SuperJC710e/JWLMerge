@@ -4,7 +4,7 @@
     using System.Collections.Generic;
     using System.Linq;
     using JWLMerge.BackupFileServices.Models;
-    using JWLMerge.BackupFileServices.Models.Database;
+    using JWLMerge.BackupFileServices.Models.DatabaseModels;
 
     internal sealed class NotesImporter
     {
@@ -136,8 +136,7 @@
             {
                 TagMapId = ++_maxTagMapId,
                 TagId = tagId,
-                Type = 1,   // tag is on a note
-                TypeId = noteId,
+                NoteId = noteId,
             };
         }
 
@@ -162,7 +161,7 @@
             // now add the block range...
             var blockRange = new BlockRange
             {
-                BlockRangeId =++_maxBlockRangeId,
+                BlockRangeId = ++_maxBlockRangeId,
                 BlockType = 2,
                 Identifier = verseNumber,
                 StartToken = startToken,

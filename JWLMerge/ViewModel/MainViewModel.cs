@@ -23,12 +23,13 @@ namespace JWLMerge.ViewModel
     // ReSharper disable once ClassNeverInstantiated.Global
     internal class MainViewModel : ViewModelBase
     {
-        private const string LatestReleaseUrl = "https://github.com/AntonyCorbett/JWLMerge/releases/latest";
+        private readonly string _latestReleaseUrl = Properties.Resources.LATEST_RELEASE_URL;
         private readonly IDragDropService _dragDropService;
         private readonly IBackupFileService _backupFileService;
         private readonly IWindowService _windowService;
         private readonly IFileOpenSaveService _fileOpenSaveService;
         private readonly IDialogService _dialogService;
+        private bool _isBusy;
 
         public MainViewModel(
             IDragDropService dragDropService, 
@@ -59,6 +60,58 @@ namespace JWLMerge.ViewModel
 
             GetVersionData();
         }
+
+        public ObservableCollection<JwLibraryFile> Files { get; } = new ObservableCollection<JwLibraryFile>();
+
+        public string Title { get; set; }
+
+        public bool FileListEmpty => Files.Count == 0;
+
+        public bool IsBusy
+        {
+            get => _isBusy;
+            private set
+            {
+                if (_isBusy != value)
+                {
+                    _isBusy = value;
+                    RaisePropertyChanged();
+                    RaisePropertyChanged(nameof(IsNotBusy));
+
+                    MergeCommand?.RaiseCanExecuteChanged();
+                    CloseCardCommand?.RaiseCanExecuteChanged();
+                }
+            }
+        }
+
+        public bool IsNotBusy => !IsBusy;
+
+        public bool IsNewVersionAvailable { get; private set; }
+
+        public string MergeCommandCaption
+        {
+            get
+            {
+                int fileCount = GetMergeableFileCount();
+                if (fileCount == 1)
+                {
+                    return "SAVE AS";
+                }
+
+                return "MERGE";
+            }
+        }
+
+        // commands...
+        public RelayCommand<string> CloseCardCommand { get; set; }
+
+        public RelayCommand<string> ShowDetailsCommand { get; set; }
+
+        public RelayCommand MergeCommand { get; set; }
+
+        public RelayCommand HomepageCommand { get; set; }
+
+        public RelayCommand UpdateCommand { get; set; }
 
         private JwLibraryFile GetFile(string filePath)
         {
@@ -109,12 +162,12 @@ namespace JWLMerge.ViewModel
 
         private void LaunchLatestReleasePage()
         {
-            Process.Start(LatestReleaseUrl);
+            Process.Start(_latestReleaseUrl);
         }
 
         private void LaunchHomepage()
         {
-            Process.Start("https://github.com/AntonyCorbett/JWLMerge");
+            Process.Start(Properties.Resources.HOMEPAGE);
         }
 
         private void PrepareForMerge()
@@ -243,9 +296,7 @@ namespace JWLMerge.ViewModel
                     file.NotesRedacted);
             }
         }
-
-        public ObservableCollection<JwLibraryFile> Files { get; } = new ObservableCollection<JwLibraryFile>();
-
+        
         private void AddDesignTimeItems()
         {
             if (IsInDesignMode)
@@ -277,35 +328,50 @@ namespace JWLMerge.ViewModel
         {
             if (!IsBusy)
             {
-                // ReSharper disable once StyleCop.SA1305
-                var jwLibraryFiles = _dragDropService.GetDroppedFiles(message.DragEventArgs);
-
-                var tmpFilesCollection = new ConcurrentBag<JwLibraryFile>();
-
-                // ReSharper disable once StyleCop.SA1116
-                // ReSharper disable once StyleCop.SA1115
-                Parallel.ForEach(jwLibraryFiles, file =>
+                try
                 {
-                    var backupFile = _backupFileService.Load(file);
-
-                    tmpFilesCollection.Add(new JwLibraryFile
-                    {
-                        BackupFile = backupFile,
-                        FilePath = file
-                    });
-                });
-
-                foreach (var file in tmpFilesCollection)
+                    HandleDroppedFiles(message.DragEventArgs);
+                }
+                catch (AggregateException ex)
                 {
-                    if (Files.FirstOrDefault(x => IsSameFile(file.FilePath, x.FilePath)) == null)
-                    {
-                        file.PropertyChanged += FilePropertyChanged;
-                        Files.Add(file);
-                    }
+                    Log.Logger.Information(ex, "Unable to accept file");
+
+                    _dialogService.ShowFileFormatErrorsAsync(ex);
+                }
+                catch (Exception ex)
+                {
+                    Log.Logger.Error(ex, "Unexpected error");
                 }
             }
 
             message.DragEventArgs.Handled = true;
+        }
+
+        private void HandleDroppedFiles(DragEventArgs dragEventArgs)
+        {
+            var jwLibraryFiles = _dragDropService.GetDroppedFiles(dragEventArgs);
+
+            var tmpFilesCollection = new ConcurrentBag<JwLibraryFile>();
+
+            Parallel.ForEach(jwLibraryFiles, file =>
+            {
+                var backupFile = _backupFileService.Load(file);
+
+                tmpFilesCollection.Add(new JwLibraryFile
+                {
+                    BackupFile = backupFile,
+                    FilePath = file,
+                });
+            });
+
+            foreach (var file in tmpFilesCollection)
+            {
+                if (Files.FirstOrDefault(x => IsSameFile(file.FilePath, x.FilePath)) == null)
+                {
+                    file.PropertyChanged += FilePropertyChanged;
+                    Files.Add(file);
+                }
+            }
         }
 
         private void FilePropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -331,34 +397,7 @@ namespace JWLMerge.ViewModel
             var count = Files.Count(file => file.MergeParameters.AnyIncludes());
             return count == 1 ? 0 : count;
         }
-
-        public string Title { get; set; }
-        
-        public bool FileListEmpty => Files.Count == 0;
-
-        private bool _isBusy;
-
-        public bool IsBusy
-        {
-            get => _isBusy;
-            private set
-            {
-                if (_isBusy != value)
-                {
-                    _isBusy = value;
-                    RaisePropertyChanged();
-                    RaisePropertyChanged(nameof(IsNotBusy));
-
-                    MergeCommand?.RaiseCanExecuteChanged();
-                    CloseCardCommand?.RaiseCanExecuteChanged();
-                }
-            }
-        }
-
-        public bool IsNotBusy => !IsBusy;
-
-        public bool IsNewVersionAvailable { get; private set; }
-        
+       
         private void GetVersionData()
         {
             if (IsInDesignMode)
@@ -370,7 +409,7 @@ namespace JWLMerge.ViewModel
             {
                 Task.Delay(2000).ContinueWith(_ =>
                 {
-                    var latestVersion = VersionDetection.GetLatestReleaseVersion(LatestReleaseUrl);
+                    var latestVersion = VersionDetection.GetLatestReleaseVersion(_latestReleaseUrl);
                     if (latestVersion != null && VersionDetection.GetCurrentVersion().CompareTo(latestVersion) < 0)
                     {
                         // there is a new version....
@@ -380,30 +419,5 @@ namespace JWLMerge.ViewModel
                 });
             }
         }
-        
-        public string MergeCommandCaption
-        {
-            get
-            {
-                int fileCount = GetMergeableFileCount();
-                if (fileCount == 1)
-                {
-                    return "SAVE AS";
-                }
-                
-                return "MERGE";
-            }
-        }
-
-        // commands...
-        public RelayCommand<string> CloseCardCommand { get; set; }
-
-        public RelayCommand<string> ShowDetailsCommand { get; set; }
-
-        public RelayCommand MergeCommand { get; set; }
-
-        public RelayCommand HomepageCommand { get; set; }
-
-        public RelayCommand UpdateCommand { get; set; }
     }
 }

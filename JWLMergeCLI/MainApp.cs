@@ -4,9 +4,9 @@
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
-    using Exceptions;
     using JWLMerge.BackupFileServices;
     using JWLMerge.BackupFileServices.Events;
+    using JWLMergeCLI.Exceptions;
     using Serilog;
 
     /// <summary>
@@ -51,7 +51,7 @@
             {
                 if (!File.Exists(arg))
                 {
-                    throw new JWLMergeCLIException($"File does not exist: {arg}");
+                    throw new JwlMergeCmdLineException($"File does not exist: {arg}");
                 }
                 
                 Log.Logger.Debug("Found file: {file}", arg);
@@ -60,7 +60,7 @@
 
             if (result.Count < 2)
             {
-                throw new JWLMergeCLIException("Specify at least 2 files to merge");
+                throw new JwlMergeCmdLineException("Specify at least 2 files to merge");
             }
 
             return result;
